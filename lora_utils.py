@@ -6,6 +6,7 @@ Handles:
 - Creating optimizer that freezes base params, trains only LoRA
 - Counting and summarizing parameters
 """
+from flax.core import freeze, unfreeze, FrozenDict
 
 import jax
 import jax.numpy as jnp
@@ -37,16 +38,19 @@ def create_lora_mask(params):
     
     return jax.tree_util.tree_map_with_path(label_fn, params)
 
-def zero_non_lora_grads(grads, params):
-    """Zero out gradients for non-LoRA parameters."""
+def zero_non_lora_grads(grads, params=None):
+    """Zero gradients for non-LoRA params while preserving PyTree structure."""
+    was_frozen = isinstance(grads, FrozenDict)
+    grad_tree = unfreeze(grads) if was_frozen else grads
+
     def maybe_zero(path, g):
         path_str = "/".join(str(p) for p in path)
         if "lora_A" in path_str or "lora_B" in path_str:
             return g
         return jnp.zeros_like(g)
-    
-    return jax.tree_util.tree_map_with_path(maybe_zero, grads)
 
+    grad_tree = jax.tree_util.tree_map_with_path(maybe_zero, grad_tree)
+    return freeze(grad_tree) if was_frozen else grad_tree
 
 def load_pretrained_into_lora(lora_params, pretrained_params):
     """Load pretrained base model weights into LoRA model params.

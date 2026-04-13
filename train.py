@@ -31,6 +31,8 @@ from lora_utils import (
     load_pretrained_into_lora,
     print_lora_summary,
 )
+from lora_utils import create_lora_mask
+
 #######################################################
 # Initialize
 #######################################################
@@ -58,21 +60,25 @@ class TrainState(train_state.TrainState):
   ema_params: Any
 
 
-def create_train_state(
-    rng, config: ml_collections.ConfigDict, model, image_size, lr_value
-):
+def create_train_state(rng, config, model, image_size, lr_value):
     rng, rng_init = random.split(rng)
-    
+
     _, params = initialized(rng_init, image_size, model)
     ema_params = deepcopy(params)
     ema_params = update_ema(ema_params, params, 0)
     print_params(params['net'])
 
-    tx = optax.adamw(
+    base_tx = optax.adamw(
         learning_rate=lr_value,
         weight_decay=0,
         b2=config.training.adam_b2,
     )
+
+    if config.model.get('lora_rank', None) is not None:
+        mask = create_lora_mask(params)
+        tx = optax.masked(base_tx, mask)
+    else:
+        tx = base_tx
 
     state = TrainState.create(
         apply_fn=partial(model.apply, method=model.forward),
@@ -124,9 +130,9 @@ def train_step_with_vae(state, batch, rng_init, config, lr, ema_fn, latent_mnger
   grads = lax.pmean(grads, axis_name='batch')
 
   # Zero out gradients for non-LoRA params
-  if config.model.get('lora_rank', None) is not None:
-      from lora_utils import zero_non_lora_grads
-      grads = zero_non_lora_grads(grads, state.params)
+  #if config.model.get('lora_rank', None) is not None:
+     # from lora_utils import zero_non_lora_grads
+    #  grads = zero_non_lora_grads(grads, state.params)
 
   dict_losses, = aux[1]
   metrics = compute_metrics(dict_losses)
