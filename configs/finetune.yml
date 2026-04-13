@@ -1,0 +1,31 @@
+model:
+    cls: LoRA_DiT_B_4
+    lora_rank: 8
+    lora_alpha: 16.0
+
+dataset:
+    root: /n/netscratch/kempner_undergrads/Lab/serenaliu/meanflow/meanflow_latents_50k
+
+training:
+    num_epochs: 20
+    batch_size: 256
+    learning_rate: 0.0001    # Can use higher LR with LoRA since few params
+    adam_b2: 0.95
+    ema_type: const
+    log_per_step: 25
+    sample_per_epoch: 5
+    sample_on_training: True
+    checkpoint_per_epoch: 5
+    fid_per_epoch: 5
+    seed: 42
+
+fid:
+    on_training: True
+    device_batch_size: 20
+    num_samples: 50000
+    cache_ref: /n/netscratch/kempner_undergrads/Lab/serenaliu/meanflow/imgnet256_adm.npz
+
+sampling:
+    num_steps: 1
+
+load_from: /n/netscratch/kempner_undergrads/Lab/serenaliu/meanflow/ckpt
