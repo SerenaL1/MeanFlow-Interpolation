@@ -264,7 +264,15 @@ def train_and_evaluate(
               **config.sampling,
               **config.method,
           )
-          base_state = create_train_state(rng, config, base_model, image_size, lr_value=base_lr)
+          _, base_params = initialized(rng, image_size, base_model)
+          base_ema = deepcopy(base_params)
+          base_tx = optax.adamw(learning_rate=base_lr, weight_decay=0, b2=config.training.adam_b2)
+          base_state = TrainState.create(
+              apply_fn=partial(base_model.apply, method=base_model.forward),
+              params=base_params,
+              ema_params=base_ema,
+              tx=base_tx,
+          )
           base_state = restore_checkpoint(base_state, config.load_from)
           log_for_0("Base checkpoint loaded successfully")
           
