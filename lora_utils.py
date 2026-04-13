@@ -27,16 +27,19 @@ def create_lora_mask(params):
     """Create a boolean mask tree matching params structure.
     
     True = LoRA param (trainable), False = base param (frozen).
-    Uses jax.tree.map_with_path to preserve exact tree structure.
     """
-    from flax.core import unfreeze
-    params = unfreeze(params)  # Convert all FrozenDicts to regular dicts
+    from flax.core import freeze, unfreeze, FrozenDict
+    from flax.traverse_util import flatten_dict, unflatten_dict
     
-    def label_fn(path, _):
-        path_str = "/".join(str(p) for p in path)
-        return "lora_A" in path_str or "lora_B" in path_str
+    # Remember what type we started with
+    was_frozen = isinstance(params, FrozenDict)
     
-    return jax.tree_util.tree_map_with_path(label_fn, params)
+    flat_params = flatten_dict(unfreeze(params))
+    flat_mask = {key: is_lora_param(key) for key in flat_params.keys()}
+    mask = unflatten_dict(flat_mask)
+    
+    # Return exactly the type we received
+    return freeze(mask) if was_frozen else mask
 
 def zero_non_lora_grads(grads, params=None):
     """Zero gradients for non-LoRA params while preserving PyTree structure."""
@@ -103,12 +106,16 @@ def load_pretrained_into_lora(lora_params, pretrained_params):
             merged[key] = lora_value
             missing_count += 1
     
+    
     log_for_0(f"Loaded {loaded_count} base params from pretrained checkpoint")
     log_for_0(f"Kept {kept_lora_count} LoRA params at initialized values")
     if missing_count > 0:
         log_for_0(f"WARNING: {missing_count} params not found in pretrained checkpoint")
     
-    return freeze(unflatten_dict(merged))
+    # --- CHANGE THIS PART ---
+    was_frozen = isinstance(lora_params, FrozenDict)
+    merged_unflat = unflatten_dict(merged)
+    return freeze(merged_unflat) if was_frozen else merged_unflat
 
 
 def print_lora_summary(params):
