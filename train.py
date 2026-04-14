@@ -76,7 +76,19 @@ def create_train_state(rng, config, model, image_size, lr_value):
 
     if config.model.get('lora_rank', None) is not None:
         mask = create_lora_mask(params)
-        tx = optax.masked(base_tx, mask)
+        
+        # 1. Map the boolean mask (True/False) to string labels
+        label_fn = lambda m: "trainable" if m else "frozen"
+        partition_labels = jax.tree_util.tree_map(label_fn, mask)
+        
+        # 2. Apply multi_transform: base_tx to trainable, zero out the rest
+        tx = optax.multi_transform(
+            transforms={
+                "trainable": base_tx,
+                "frozen": optax.set_to_zero(),
+            },
+            param_labels=partition_labels,
+        )
     else:
         tx = base_tx
 
